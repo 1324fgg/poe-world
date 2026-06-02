@@ -7,14 +7,17 @@ task: MontezumaRevenge
 seed: 0
 random_seed: 0
 
-multi_core: False
-n_cpu: 8
+multi_core: True #false
+n_cpu: 64 #8 dong change to 32
 
 obs_suffix: '_basic'
+# Which scripted trajectory to collect in make_observations.py: basic1 | basic2 | both
+obs_variant: both
 obs_index: -1
 obs_index_length: 1
 
-provider: openrouter
+provider: deepinfra
+llm_model: Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo
 database_path: null
 use_memory: False
 
@@ -26,44 +29,59 @@ imagined_atari_env:
   time_lag: 0
 
 world_model_learner:
-  obj_type: player
+  obj_type: player #here why only palyer?
   exclude_score_objects: True
 
 obj_model_learner:
-  save_freq: 20
+  save_freq: 20 
 
 synthesizer:
-  synth_window: 1
+  synth_window: 1 #1? 
 
-moe:
+moe: #model fitting, that's a false moe, it is decided when training the eworld model
   continue_params: True
   lr: 1
-  batch_size: 10000
+  batch_size: 10000 # that is too large
   n_steps: 4
   optim: lbfgs
   cache_history_size: 5
 
 agent:
   ignore_monster: False
-  initial_budget_iterations: 4000
+  initial_budget_iterations: 0 #4000 dong change to 0
   budget_increase_mode: slow
   prune_bad_edges: True
   permanent_world_update: True
   update_player_only: True
   get_rid_of_ghost: False
-  use_ideal_plan: False
+  use_ideal_plan: True #dong change it to True
   n_goals_to_achieve: 1
-  quick_build_graph: False
+  quick_build_graph: True # dong change to true
   fast_world_update: True
-  short_term_accuracy: 0.4
+  short_term_accuracy: 0.4 #0.4
   wait_between_goal: 20
   max_iter: 10
+  # These are added by Dong
+  # Cap full graph builds per Agent (was hardcoded 5).
+  max_graph_builds: 2
+  # Main planning loop iterations (symbolic try / fallback / no-plan handler); then stop.
+  max_planning_main_loop_iterations: 5
+  # If symbolic BFS has no plan, try low-level MCTS straight to goal in real env.
+  direct_mcts_fallback: True
+  # When doing direct MCTS, multiply the graph budget by this factor.
+  # This helps when graph budget is too small to ever find a key-touch plan.
+  direct_mcts_fallback_iterations_multiplier: 5
+  # In the "no symbolic plan" handler, how many times we are allowed to try
+  # direct MCTS before we fall back to building more graphs.
+  max_direct_mcts_fallback_attempts_in_no_plan: 2
+  # Match achievables_hsh entries when key instance id differs from graph build (reset).
+  achievable_relax_object_id: True
 
 mcts:
   exploration_weight: 0.01
   sticky_actions: True
-  future_length: 8
-  n_tries: 20
+  future_length: 8 #8
+  n_tries: 20 #20
   
 
 montezuma_first_room: False

@@ -1,0 +1,23 @@
+defaults:
+  - config
+  - _self_
+
+task: Skiing
+obs_suffix: _basic2
+obs_variant: basic2
+
+world_model_learner:
+  # Skier physics (turning inertia, speed) are deterministic given actions and
+  # are the most valuable part of the WM for Skiing.
+  # Obstacle (tree/mogul/flag) appearance is procedurally generated and harder
+  # to learn; setting obj_type to 'all' will attempt it regardless.
+  obj_type: all
+  exclude_score_objects: True
+
+det_world_model: True
+post_synthesis_mode: run
+debug_mode: True
+
+imagined_atari_env:
+  start_at: 5
+  time_lag: 0.1

@@ -7,9 +7,10 @@ obs_suffix: _basic17
 world_model_learner:
   obj_type: all
 post_synthesis_mode: agent
-debug_mode: True
+debug_mode: False #only works when quick_graph+ False, however, dong set it to true
 
 agent:
-  initial_budget_iterations: 4000
+  initial_budget_iterations: 0 #4000 dong change to 100, and 0
 
 break_g2: True  
+# “Slurm vs local subprocess for slow graph build” will skip it when "build quick graph = True"

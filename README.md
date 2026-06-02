@@ -38,7 +38,7 @@ pip install -e .
 # Important: you also need to create a file (secrets.json) containing your OpenAI's API key here -- see instruction below
 cd ..
 ```
-`openai-hf-interface` is a package that provides nice abstractions for calling OpenAI's api, so you need to input your OpenAI's API key. To do that, create a file called `secrets.json` inside `openai-hf-interface` directory and set the key called `openai_api_key` to your OpenAI's API key value. See [the package's repo](https://github.com/topwasu/openai-hf-interface) for more information.
+`openai-hf-interface` is a package that provides nice abstractions for calling OpenAI-compatible APIs, so you need to input the API key for the provider you use. To do that, create a file called `secrets.json` inside `openai-hf-interface` directory and set the matching key such as `openai_api_key`, `openrouter_api_key`, or `deepinfra_api_key`. See [the package's repo](https://github.com/topwasu/openai-hf-interface) for more information.
 
 Install the submodule OCAtari
 ```

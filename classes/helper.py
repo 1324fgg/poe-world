@@ -66,6 +66,30 @@ def set_global_constants(env_name):
             PONG_MAX_ABS_SIZE_CHANGE,
             PONG_ACTIONS
         )
+    elif env_name == 'Alien':
+        Constants.set_constants(
+            alien_wh_dict,
+            ALIEN_MAX_ABS_VELOCITY,
+            ALIEN_HISTORY_LENGTH,
+            ALIEN_MAX_ABS_SIZE_CHANGE,
+            ALIEN_ACTIONS
+        )
+    elif env_name == 'Assault':
+        Constants.set_constants(
+            assault_wh_dict,
+            ASSAULT_MAX_ABS_VELOCITY,
+            ASSAULT_HISTORY_LENGTH,
+            ASSAULT_MAX_ABS_SIZE_CHANGE,
+            ASSAULT_ACTIONS
+        )
+    elif env_name == 'Skiing':
+        Constants.set_constants(
+            skiing_wh_dict,
+            SKIING_MAX_ABS_VELOCITY,
+            SKIING_HISTORY_LENGTH,
+            SKIING_MAX_ABS_SIZE_CHANGE,
+            SKIING_ACTIONS
+        )
     else:
         raise NotImplementedError
 

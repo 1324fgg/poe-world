@@ -1,0 +1,22 @@
+defaults:
+  - config
+  - _self_
+
+task: Assault
+obs_suffix: _basic2
+obs_variant: basic2
+
+world_model_learner:
+  # Player cannon movement is fully deterministic given actions.
+  # Enemy and missile creation events are stochastic; setting obj_type to
+  # 'all' will attempt to synthesize creation rules but accuracy will vary.
+  obj_type: all
+  exclude_score_objects: True
+
+det_world_model: True
+post_synthesis_mode: run
+debug_mode: True
+
+imagined_atari_env:
+  start_at: 5
+  time_lag: 0.1

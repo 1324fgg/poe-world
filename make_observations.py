@@ -24,6 +24,24 @@ def set_seed(seed):
     random.seed(seed)
 
 
+def collect_basic_variants(
+    config: DictConfig,
+    task: str,
+    basic1_actions: List[str],
+    basic2_actions: List[str],
+) -> None:
+    """Run make_observations for basic1 and/or basic2 per config.obs_variant."""
+    variant = str(getattr(config, "obs_variant", "both")).lower()
+    if variant in ("basic1", "both"):
+        make_observations(config, basic1_actions, f"obs_{task}_basic1")
+    if variant in ("basic2", "both"):
+        make_observations(config, basic2_actions, f"obs_{task}_basic2")
+    if variant not in ("basic1", "basic2", "both"):
+        raise ValueError(
+            f"obs_variant must be basic1, basic2, or both; got {variant!r}"
+        )
+
+
 def make_observations(config: DictConfig, actions: List[str],
                       name: str) -> None:
     """
@@ -162,6 +180,15 @@ def main(config: DictConfig) -> None:
     #     # from actions_lists.actions_list_extra import pong_alt_actions_worldcoder
     #     # make_observations(config, pong_alt_actions_worldcoder,
     #     #                   f'obs_{config.task}_worldcoder')
+    elif config.task == 'Alien':
+        collect_basic_variants(
+            config, config.task, alien_actions_basic1, alien_actions_basic2)
+    elif config.task == 'Assault':
+        collect_basic_variants(
+            config, config.task, assault_actions_basic1, assault_actions_basic2)
+    elif config.task == 'Skiing':
+        collect_basic_variants(
+            config, config.task, skiing_actions_basic1, skiing_actions_basic2)
     else:
         raise NotImplementedError
 

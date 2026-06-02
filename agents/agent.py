@@ -9,6 +9,8 @@ import numpy as np
 import hashlib
 from collections import defaultdict
 
+from omegaconf import OmegaConf
+
 from agents.mcts import MCTS
 from agents.utils import *
 from classes.envs import *
@@ -59,14 +61,23 @@ class Agent:
         
         # Build initial abstract graph
         if self.abstract_planning:
-            skills_hsh, achievables_hsh = self.build_graph(cur_obj_list.deepcopy(),
-                                                        n_budget_iterations,
-                                                        goal_obj_type,
-                                                        load=True)
+            if OmegaConf.select(self.config, "agent.use_ideal_plan",
+                                default=False):
+                # Ideal plan branch doesn't need a pre-built abstract graph.
+                skills_hsh, achievables_hsh = {}, {}
+            else:
+                skills_hsh, achievables_hsh = self.build_graph(
+                    cur_obj_list.deepcopy(),
+                    n_budget_iterations,
+                    goal_obj_type,
+                    load=True)
 
             n_goals_achieved = 0
+            planning_success = False
+            max_main = OmegaConf.select(
+                self.config, "agent.max_planning_main_loop_iterations", default=15)
 
-            while True:
+            for _attempt in range(max_main):
                 
                 if self.atari_env.n_reset > 10:
                     log.info(f'NO GOAL AFTER 10 EPISODES')
@@ -81,6 +92,19 @@ class Agent:
                 log.info(f'All actions taken: ' + str(self.actions_taken))
 
                 if symbolic_plan is None:
+                    if OmegaConf.select(self.config, "agent.direct_mcts_fallback",
+                                        default=True):
+                        ok, cur_obj_list, cur_game_state = self._try_direct_mcts_goal(
+                            cur_obj_list, cur_game_state, goal_obj_type,
+                            n_budget_iterations)
+                        if ok:
+                            log.info(
+                                "GOT GOAL via direct MCTS fallback (no symbolic plan)")
+                            planning_success = True
+                            n_goals_achieved += 1
+                            if n_goals_achieved >= self.config.agent.n_goals_to_achieve:
+                                break
+                            continue
                     # Handle case where no plan found
                     (cur_obj_list, cur_game_state, skills_hsh, achievables_hsh,
                     n_budget_iterations) = self._handle_no_plan(
@@ -105,9 +129,24 @@ class Agent:
                     log.info(f'All actions taken: ' + str(self.actions_taken))
                     
                     n_goals_achieved += 1
+                    planning_success = True
                     
                     if n_goals_achieved >= self.config.agent.n_goals_to_achieve:
                         break
+            else:
+                log.info(
+                    f"Stopped after {max_main} main-loop iterations (limit reached)")
+
+            if planning_success and n_goals_achieved >= self.config.agent.n_goals_to_achieve:
+                msg = "=== PLANNING_OUTCOME: SUCCESS ==="
+            elif planning_success:
+                msg = "=== PLANNING_OUTCOME: PARTIAL_SUCCESS ==="
+            else:
+                msg = (
+                    "=== PLANNING_OUTCOME: CANNOT_FIND_SUCCESSFUL_PLAN "
+                    "(within limits) ===")
+            log.warning(msg)
+            print(msg, flush=True)
         else:
             n_goals_achieved = 0
             while True:
@@ -209,7 +248,60 @@ class Agent:
             return None
         return self.search_and_prune_in_graph(
             self._abstract_state(cur_obj_list), goal_id, skills_hsh,
-            achievables_hsh)[0]
+            achievables_hsh, cur_obj_list, goal_obj_type)[0]
+
+    def _try_direct_mcts_goal(
+            self, cur_obj_list: Any, cur_game_state: Any, goal_obj_type: str,
+            n_budget_iterations: int) -> Tuple[bool, Any, Any]:
+        """
+        Low-level MCTS in the world model, then replay actions in the real env.
+        Used when the abstract graph yields no symbolic plan.
+        """
+        goal_id = self._get_goal_id(cur_obj_list, goal_obj_type)
+        if goal_id == -1:
+            log.info("direct MCTS fallback: no goal object in scene")
+            return False, cur_obj_list, cur_game_state
+        log.info(
+            f"direct MCTS fallback: searching for {goal_obj_type} id={goal_id}")
+
+        iters_mult = OmegaConf.select(
+            self.config,
+            "agent.direct_mcts_fallback_iterations_multiplier",
+            default=5)
+        iterations = max(1, int(n_budget_iterations * iters_mult))
+        plan = self.mcts.search(
+            cur_obj_list,
+            str([goal_id]),
+            self.world_learner.world_model,
+            iterations=iterations,
+            target_id=goal_id,
+            ret_concrete_state=False)
+        if plan is None:
+            log.info("direct MCTS fallback: no plan")
+            return False, cur_obj_list, cur_game_state
+        if not plan:
+            try:
+                pl = cur_obj_list.get_objs_by_obj_type('player')[0]
+                key = cur_obj_list.get_obj_by_id(goal_id)
+                if key and pl.overlaps(key):
+                    return True, cur_obj_list, cur_game_state
+            except Exception:
+                pass
+            return False, cur_obj_list, cur_game_state
+        for a in plan:
+            cur_obj_list, cur_game_state = self.atari_env.step(a)
+            self.actions_taken.append(a)
+        try:
+            pl = cur_obj_list.get_objs_by_obj_type('player')[0]
+            key = cur_obj_list.get_obj_by_id(goal_id)
+            ok = bool(key and pl.overlaps(key))
+        except Exception:
+            ok = False
+        if ok:
+            log.info("direct MCTS fallback: overlap with goal after replay")
+        else:
+            log.info("direct MCTS fallback: replay finished without overlap")
+        return ok, cur_obj_list, cur_game_state
 
     def _handle_no_plan(
         self, cur_obj_list: Any, cur_game_state: Any, goal_obj_type: str,
@@ -246,6 +338,11 @@ class Agent:
             log.info("Still can't find symbolic plan -- building new graph")
 
             ct = 0
+            direct_ct = 0
+            max_direct = OmegaConf.select(
+                self.config,
+                "agent.max_direct_mcts_fallback_attempts_in_no_plan",
+                default=2)
             while symbolic_plan is None and self.atari_env.n_reset <= 10:
                 # Increase budget and rebuild graph
                 ct += 1
@@ -257,14 +354,29 @@ class Agent:
                     n_budget_iterations += \
                             self.config.agent.initial_budget_iterations
 
+                # Prefer direct low-level MCTS over graph rebuilding when we
+                # still have no symbolic plan.
+                if direct_ct < max_direct and OmegaConf.select(
+                        self.config, "agent.direct_mcts_fallback", default=True):
+                    ok, cur_obj_list, cur_game_state = self._try_direct_mcts_goal(
+                        cur_obj_list, cur_game_state, goal_obj_type,
+                        n_budget_iterations)
+                    direct_ct += 1
+                    if ok:
+                        return cur_obj_list, cur_game_state, skills_hsh, achievables_hsh, n_budget_iterations
+
                 log.info(
                     f"Building new graph with budget {n_budget_iterations}"
                 )
-                skills_hsh, achievables_hsh = self.build_graph(
-                    cur_obj_list.deepcopy(),
-                    n_budget_iterations,
-                    goal_obj_type,
-                    load=False)
+                try:
+                    skills_hsh, achievables_hsh = self.build_graph(
+                        cur_obj_list.deepcopy(),
+                        n_budget_iterations,
+                        goal_obj_type,
+                        load=False)
+                except Exception as e:
+                    log.warning(f"Graph build failed in no-plan handler: {e}")
+                    break
                 symbolic_plan = self._get_symbolic_plan(
                     cur_obj_list, goal_obj_type, skills_hsh, achievables_hsh)
                 
@@ -324,7 +436,9 @@ class Agent:
             )
             if not (self.config.agent.ignore_monster and died_by_monster):
                 log.info(f'Removing edge {prev_state} --> {target_state}')
-                del skills_hsh[(prev_state, target_state)]
+                # In ideal-plan mode we may not have built skills_hsh edges.
+                # Avoid crashing on missing keys.
+                skills_hsh.pop((prev_state, target_state), None)
         else:
             log.info(f'Succeed in getting to {target_state} from {prev_state}!')
         return success, cur_obj_list, cur_game_state 
@@ -647,10 +761,44 @@ class Agent:
         log.info(f'Actions taken overall: {history_actions}')
         return cur_obj_list, cur_game_state, success, died_by_monster
 
+    def _resolve_achievable(
+            self, abstract_state: str, goal_id: int,
+            achievables_hsh: Dict[Tuple[str, int], Any], cur_obj_list: Any,
+            goal_obj_type: str
+    ) -> Optional[Tuple[Tuple[str, int], Any]]:
+        """
+        Find an achievables_hsh entry for this abstract state and goal.
+        Optionally match any instance id of goal_obj_type (reset-safe).
+        """
+        relax = OmegaConf.select(self.config, "agent.achievable_relax_object_id",
+                                 default=True)
+        ordered_ids: List[int] = []
+        if goal_id >= 0:
+            ordered_ids.append(goal_id)
+        if relax:
+            for obj in cur_obj_list.get_objs_by_obj_type(goal_obj_type):
+                if obj.id not in ordered_ids:
+                    ordered_ids.append(obj.id)
+            for gid in ordered_ids:
+                key = (abstract_state, gid)
+                if key in achievables_hsh:
+                    return key, achievables_hsh[key]
+            keys_at_s = [(s, g) for (s, g) in achievables_hsh if s == abstract_state]
+            if len(keys_at_s) == 1:
+                k = keys_at_s[0]
+                return k, achievables_hsh[k]
+            return None
+        if goal_id >= 0:
+            key = (abstract_state, goal_id)
+            if key in achievables_hsh:
+                return key, achievables_hsh[key]
+        return None
+
     def search_and_prune_in_graph(
         self, cur_abstract_state: str, goal_id: int,
         skills_hsh: Dict[Tuple[str, str],
-                         Any], achievables_hsh: Dict[Tuple[str, int], Any]
+                         Any], achievables_hsh: Dict[Tuple[str, int], Any],
+        cur_obj_list: Any, goal_obj_type: str
     ) -> Tuple[Optional[List[str]], Dict[Tuple[str, str], Any], Dict[Tuple[
             str, int], Any]]:
         """
@@ -662,6 +810,8 @@ class Agent:
             goal_id: Target object ID 
             skills_hsh: Dictionary of available skills/transitions
             achievables_hsh: Dictionary of achievable goal states
+            cur_obj_list: Current scene (for relaxed achievable id matching)
+            goal_obj_type: e.g. 'key'
         
         Returns:
             Tuple of (plan, updated skills hash, updated achievables hash)
@@ -695,30 +845,33 @@ class Agent:
         while len(q) > 0:
             abstract_state, visited_abstract_states = q[0]
             q = q[1:]
-            if (abstract_state, goal_id) in achievables_hsh:
-                cur_obj_list, plan, _ = achievables_hsh[(abstract_state,
-                                                         goal_id)]
+            resolved = self._resolve_achievable(abstract_state, goal_id,
+                                                achievables_hsh, cur_obj_list,
+                                                goal_obj_type)
+            if resolved is not None:
+                ach_key, ach_val = resolved
+                cur_obj_list_stored, plan, _ = ach_val
                 # If it is no longer consistent with current world model, delete
                 if self.config.agent.prune_bad_edges and not self._on_good_path(
-                        cur_obj_list,
+                        cur_obj_list_stored,
                         plan,
                         str([goal_id]),
                         world_model,
                         target_id=goal_id):
                     log.info(
-                        f'Deleting achievable edge {abstract_state} --> {goal_id}'
+                        f'Deleting achievable edge {ach_key[0]} --> {ach_key[1]}'
                     )
-                    del achievables_hsh[(abstract_state, goal_id)]
+                    del achievables_hsh[ach_key]
                 else:
                     return visited_abstract_states, skills_hsh, achievables_hsh
 
             for abstract_neighbor in skills_mat[abstract_state]:
                 if abstract_neighbor not in hsh:
-                    cur_obj_list, plan, _ = skills_hsh[(abstract_state,
-                                                        abstract_neighbor)]
+                    edge_obj_list, plan, _ = skills_hsh[(abstract_state,
+                                                         abstract_neighbor)]
                     # If it is no longer consistent with current world model, delete
                     if self.config.agent.prune_bad_edges and not self._on_good_path(
-                            cur_obj_list, plan, abstract_neighbor,
+                            edge_obj_list, plan, abstract_neighbor,
                             world_model):
                         log.info(
                             f'Deleting skill edge {abstract_state} --> {abstract_neighbor}'
@@ -748,8 +901,12 @@ class Agent:
         Returns:
             Tuple of (skills hash, achievables hash) defining the graph
         """
-        if self.n_build_graph_calls >= 5:
-            raise Exception("Too many graph builds")
+        max_gb = OmegaConf.select(self.config, "agent.max_graph_builds",
+                                  default=12)
+        if self.n_build_graph_calls >= max_gb:
+            raise Exception(
+                f"Too many graph builds (limit {max_gb}; raise agent.max_graph_builds to allow more)"
+            )
         self.n_build_graph_calls += 1
         # INITIAL SETUP
         world_model = self.world_learner.world_model

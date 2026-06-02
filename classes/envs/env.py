@@ -73,6 +73,24 @@ def create_atari_env(config, env_name: str,
         actions_enum = PongActions
         skip_gameover = False
         frameskip = 3
+    elif env_name == 'Alien':
+        object_tracker = ObjectTracker()
+        game_state_tracker = GenericGameStateTracker()
+        actions_enum = AlienActions
+        skip_gameover = skip_gameover_if_possible
+        frameskip = 3
+    elif env_name == 'Assault':
+        object_tracker = ObjectTracker()
+        game_state_tracker = GenericGameStateTracker()
+        actions_enum = AssaultActions
+        skip_gameover = skip_gameover_if_possible
+        frameskip = 1
+    elif env_name == 'Skiing':
+        object_tracker = ObjectTracker()
+        game_state_tracker = GenericGameStateTracker()
+        actions_enum = SkiingActions
+        skip_gameover = False
+        frameskip = 1
     else:
         raise NotImplementedError
     
@@ -134,7 +152,8 @@ class AtariEnv:
             recorder: Optional recorder for capturing gameplay
         """
         if env_name not in [
-                'MontezumaRevenge', 'Pitfall', 'PrivateEye', 'Breakout', 'Pong'
+                'MontezumaRevenge', 'Pitfall', 'PrivateEye', 'Breakout', 'Pong',
+                'Alien', 'Assault', 'Skiing',
         ]:
             raise NotImplementedError
 

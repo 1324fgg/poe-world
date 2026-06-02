@@ -1,0 +1,21 @@
+defaults:
+  - config
+  - _self_
+
+task: Alien
+obs_suffix: _basic2
+obs_variant: basic2
+
+world_model_learner:
+  # 'player': only model player dynamics (deterministic, most reliable).
+  # 'all': also model alien/pulsar/egg objects (stochastic, lower accuracy).
+  obj_type: all
+  exclude_score_objects: True
+
+det_world_model: True
+post_synthesis_mode: run
+debug_mode: True
+
+imagined_atari_env:
+  start_at: 10
+  time_lag: 0.1

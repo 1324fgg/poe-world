@@ -27,7 +27,7 @@ def set_seed(seed):
 
 def setup(config):
     cache_mode = 'disk_to_memory' if config.use_memory else 'disk'
-    llm = create_llm('gpt-4o-2024-08-06')
+    llm = create_llm(config.llm_model)
     llm.setup_cache(cache_mode, database_path=config.database_path)
     llm.set_default_kwargs({'timeout': 60})
     return llm

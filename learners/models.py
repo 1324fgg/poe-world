@@ -462,7 +462,7 @@ class MoEObjModel(Model):
                 new_fitteds.append(fitted)
                 new_context_lengths.append(context_length)
                 new_indices.append(idx)
-        if len(new_params) == 0:
+        if len(new_params) == 0 and len(self.params) > 0:
             new_params.append(self.params[-1])
             new_rules.append(self.rules[-1])
             new_callables.append(self.callables[-1])

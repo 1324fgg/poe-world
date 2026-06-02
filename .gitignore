@@ -9,6 +9,15 @@
 .vscode/
 **.DS_Store**
 
+# Local training artifacts (checkpoints, observations, caches)
+saved_checkpoints*/
+saved_checkpoints*.bak_*/
+saved_data/
+saved_graph_*/
+tmp_world_models/
+logs/
+.mindstudio_poeworld_llm_cache.db
+
 baseline_checkpoints/
 baseline_logs/
 new_baseline_checkpoints/

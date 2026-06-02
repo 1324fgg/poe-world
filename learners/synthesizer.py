@@ -875,6 +875,9 @@ class MultiTimestepStatusChangeVelocityModeSynthesizer(Synthesizer):
             output_ids = [o.id for o in output_target_obj_list]
 
             for o in input_target_obj_list:
+                if o.id not in output_ids:
+                    # Object was destroyed between frames; skip this transition
+                    continue
                 velocity_x_lst_by_id[o.id].append(
                     output_target_obj_list[output_ids.index(o.id)].velocity_x)
                 velocity_y_lst_by_id[o.id].append(
